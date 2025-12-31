@@ -310,7 +310,7 @@ export class GameScene extends Phaser.Scene {
     ) as Phaser.Physics.Arcade.Sprite;
 
     enemy.setVelocityX(-ENEMY_SPEED * this.gameSpeed);
-    enemy.body!.setAllowGravity(false);
+    (enemy.body as Phaser.Physics.Arcade.Body).allowGravity = false;
     enemy.play("yoda-fly");
 
     // Add floating motion
@@ -334,7 +334,7 @@ export class GameScene extends Phaser.Scene {
       "crystal"
     ) as Phaser.Physics.Arcade.Sprite;
 
-    crystal.body!.setAllowGravity(false);
+    (crystal.body as Phaser.Physics.Arcade.Body).allowGravity = false;
     crystal.play("crystal-sparkle");
 
     // Add floating animation
