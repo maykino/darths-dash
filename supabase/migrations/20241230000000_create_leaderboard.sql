@@ -24,3 +24,4 @@ CREATE POLICY "Anyone can view leaderboard" ON leaderboard
 CREATE POLICY "Anyone can submit scores" ON leaderboard
     FOR INSERT
     WITH CHECK (true);
+# Trigger migration
