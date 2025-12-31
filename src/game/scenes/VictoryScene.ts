@@ -268,11 +268,14 @@ export class VictoryScene extends Phaser.Scene {
   }
 
   private createButtons(): void {
+    const isMobile = this.detectMobile();
+
     // Play Again button
+    const playAgainLabel = isMobile ? "TAP - PLAY AGAIN" : "SPACE - PLAY AGAIN";
     const playAgainText = this.add.text(
       GAME_WIDTH / 2 - 180,
       GAME_HEIGHT - 45,
-      "SPACE - PLAY AGAIN",
+      playAgainLabel,
       {
         fontFamily: "Press Start 2P, monospace",
         fontSize: "12px",
@@ -289,10 +292,11 @@ export class VictoryScene extends Phaser.Scene {
     });
 
     // Menu button
+    const menuLabel = isMobile ? "MENU" : "M - MENU";
     this.add.text(
       GAME_WIDTH / 2 + 180,
       GAME_HEIGHT - 45,
-      "M - MENU",
+      menuLabel,
       {
         fontFamily: "Press Start 2P, monospace",
         fontSize: "12px",
@@ -300,7 +304,7 @@ export class VictoryScene extends Phaser.Scene {
       }
     ).setOrigin(0.5);
 
-    // Input handling
+    // Input handling - keyboard
     this.input.keyboard?.on("keydown-SPACE", () => {
       this.cleanUp();
       this.scene.start("GameScene", {
@@ -324,6 +328,49 @@ export class VictoryScene extends Phaser.Scene {
         callbacks: this.callbacks
       });
     });
+
+    // Touch handling
+    if (isMobile) {
+      // Play again button touch
+      const playAgainBtn = this.add.rectangle(
+        GAME_WIDTH / 2 - 180,
+        GAME_HEIGHT - 45,
+        300,
+        60,
+        0x00ff00,
+        0.2
+      ).setInteractive();
+      playAgainBtn.on('pointerdown', () => {
+        this.cleanUp();
+        this.scene.start("GameScene", {
+          playerName: this.playerName,
+          callbacks: this.callbacks
+        });
+      });
+
+      // Menu button touch
+      const menuBtn = this.add.rectangle(
+        GAME_WIDTH / 2 + 180,
+        GAME_HEIGHT - 45,
+        150,
+        60,
+        0x888888,
+        0.2
+      ).setInteractive();
+      menuBtn.on('pointerdown', () => {
+        this.cleanUp();
+        this.scene.start("MenuScene", {
+          playerName: this.playerName,
+          callbacks: this.callbacks
+        });
+      });
+    }
+  }
+
+  private detectMobile(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0);
   }
 
   private cleanUp(): void {

@@ -97,6 +97,16 @@ export class GameScene extends Phaser.Scene {
   private isPaused = false;
   private pauseOverlay!: Phaser.GameObjects.Container;
 
+  // Touch controls
+  private isMobile = false;
+  private touchControls!: Phaser.GameObjects.Container;
+  private joystickBase!: Phaser.GameObjects.Arc;
+  private joystickThumb!: Phaser.GameObjects.Arc;
+  private joystickPointer: Phaser.Input.Pointer | null = null;
+  private touchMoveX = 0;
+  private touchJump = false;
+  private touchAttack = false;
+
   // Particles
   private sparkEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
   private crystalEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -176,6 +186,142 @@ export class GameScene extends Phaser.Scene {
 
     // Setup collisions
     this.setupCollisions();
+
+    // Detect mobile and create touch controls
+    this.isMobile = this.detectMobile();
+    if (this.isMobile) {
+      this.createTouchControls();
+    }
+  }
+
+  private detectMobile(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0);
+  }
+
+  private createTouchControls(): void {
+    this.touchControls = this.add.container(0, 0);
+    this.touchControls.setScrollFactor(0);
+    this.touchControls.setDepth(150);
+
+    // Virtual joystick (left side)
+    const joystickX = 120;
+    const joystickY = GAME_HEIGHT - 140;
+
+    // Joystick base
+    this.joystickBase = this.add.circle(joystickX, joystickY, 70, 0x000000, 0.4);
+    this.joystickBase.setStrokeStyle(4, 0x00ffff, 0.6);
+    this.touchControls.add(this.joystickBase);
+
+    // Joystick thumb
+    this.joystickThumb = this.add.circle(joystickX, joystickY, 35, 0x00ffff, 0.6);
+    this.touchControls.add(this.joystickThumb);
+
+    // Jump button (right side, bottom)
+    const jumpBtn = this.add.circle(GAME_WIDTH - 100, GAME_HEIGHT - 100, 50, 0x00ff00, 0.4);
+    jumpBtn.setStrokeStyle(4, 0x00ff00, 0.8);
+    jumpBtn.setInteractive();
+    this.touchControls.add(jumpBtn);
+
+    const jumpText = this.add.text(GAME_WIDTH - 100, GAME_HEIGHT - 100, "JUMP", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "16px",
+      color: "#00ff00",
+    }).setOrigin(0.5);
+    this.touchControls.add(jumpText);
+
+    // Attack button (right side, top of jump)
+    const attackBtn = this.add.circle(GAME_WIDTH - 180, GAME_HEIGHT - 180, 50, 0xff0000, 0.4);
+    attackBtn.setStrokeStyle(4, 0xff0000, 0.8);
+    attackBtn.setInteractive();
+    this.touchControls.add(attackBtn);
+
+    const attackText = this.add.text(GAME_WIDTH - 180, GAME_HEIGHT - 180, "ATK", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "16px",
+      color: "#ff0000",
+    }).setOrigin(0.5);
+    this.touchControls.add(attackText);
+
+    // Pause button (top right)
+    const pauseBtn = this.add.circle(GAME_WIDTH - 50, 50, 30, 0xffffff, 0.3);
+    pauseBtn.setStrokeStyle(3, 0xffffff, 0.6);
+    pauseBtn.setInteractive();
+    this.touchControls.add(pauseBtn);
+
+    const pauseText = this.add.text(GAME_WIDTH - 50, 50, "II", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "20px",
+      color: "#ffffff",
+    }).setOrigin(0.5);
+    this.touchControls.add(pauseText);
+
+    // Button event handlers
+    jumpBtn.on('pointerdown', () => { this.touchJump = true; });
+    jumpBtn.on('pointerup', () => { this.touchJump = false; });
+    jumpBtn.on('pointerout', () => { this.touchJump = false; });
+
+    attackBtn.on('pointerdown', () => {
+      this.touchAttack = true;
+      this.attack();
+    });
+    attackBtn.on('pointerup', () => { this.touchAttack = false; });
+    attackBtn.on('pointerout', () => { this.touchAttack = false; });
+
+    pauseBtn.on('pointerdown', () => { this.togglePause(); });
+
+    // Joystick touch handling
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      // Check if touch is in left half of screen (joystick area)
+      if (pointer.x < GAME_WIDTH / 2 && !this.joystickPointer) {
+        this.joystickPointer = pointer;
+        this.updateJoystick(pointer.x, pointer.y);
+      }
+    });
+
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (this.joystickPointer && pointer.id === this.joystickPointer.id) {
+        this.updateJoystick(pointer.x, pointer.y);
+      }
+    });
+
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (this.joystickPointer && pointer.id === this.joystickPointer.id) {
+        this.joystickPointer = null;
+        this.touchMoveX = 0;
+        // Reset joystick thumb position
+        this.joystickThumb.setPosition(this.joystickBase.x, this.joystickBase.y);
+      }
+    });
+  }
+
+  private updateJoystick(touchX: number, touchY: number): void {
+    const baseX = this.joystickBase.x;
+    const baseY = this.joystickBase.y;
+    const maxDistance = 50;
+
+    // Calculate distance from joystick center
+    let deltaX = touchX - baseX;
+    let deltaY = touchY - baseY;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    // Clamp to max distance
+    if (distance > maxDistance) {
+      deltaX = (deltaX / distance) * maxDistance;
+      deltaY = (deltaY / distance) * maxDistance;
+    }
+
+    // Update thumb position
+    this.joystickThumb.setPosition(baseX + deltaX, baseY + deltaY);
+
+    // Calculate horizontal movement (-1 to 1)
+    this.touchMoveX = deltaX / maxDistance;
+
+    // Check for up movement (jump) - if pushing joystick up significantly
+    if (deltaY < -25) {
+      this.touchJump = true;
+    }
   }
 
   update(time: number, delta: number): void {
@@ -691,12 +837,15 @@ export class GameScene extends Phaser.Scene {
 
     const canCoyoteJump = time - this.lastGroundedTime < COYOTE_TIME;
 
-    // Horizontal movement
-    if (this.cursors.left.isDown) {
+    // Horizontal movement (keyboard or touch)
+    const moveLeft = this.cursors.left.isDown || (this.isMobile && this.touchMoveX < -0.3);
+    const moveRight = this.cursors.right.isDown || (this.isMobile && this.touchMoveX > 0.3);
+
+    if (moveLeft) {
       this.player.setVelocityX(-PLAYER_SPEED);
       this.facingRight = false;
       if (onGround) this.player.play("vader_run", true);
-    } else if (this.cursors.right.isDown) {
+    } else if (moveRight) {
       this.player.setVelocityX(PLAYER_SPEED);
       this.facingRight = true;
       if (onGround) this.player.play("vader_run", true);
@@ -708,9 +857,13 @@ export class GameScene extends Phaser.Scene {
     // Flip player sprite
     this.player.setFlipX(!this.facingRight);
 
-    // Jump buffer
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.cursors.space!)) {
+    // Jump buffer (keyboard or touch)
+    const keyboardJump = Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.cursors.space!);
+    if (keyboardJump || this.touchJump) {
       this.jumpBufferTime = time;
+      if (this.touchJump) {
+        this.touchJump = false; // Reset touch jump so it doesn't repeat
+      }
     }
 
     const jumpBuffered = time - this.jumpBufferTime < JUMP_BUFFER_TIME;

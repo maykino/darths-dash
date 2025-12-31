@@ -217,11 +217,14 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   private createButtons(): void {
+    const isMobile = this.detectMobile();
+
     // Retry button
+    const retryLabel = isMobile ? "TAP - RETRY" : "SPACE - RETRY";
     const retryText = this.add.text(
       GAME_WIDTH / 2 - 150,
       GAME_HEIGHT - 50,
-      "SPACE - RETRY",
+      retryLabel,
       {
         fontFamily: "Press Start 2P, monospace",
         fontSize: "14px",
@@ -238,10 +241,11 @@ export class GameOverScene extends Phaser.Scene {
     });
 
     // Menu button
-    this.add.text(
+    const menuLabel = isMobile ? "MENU" : "M - MENU";
+    const menuText = this.add.text(
       GAME_WIDTH / 2 + 150,
       GAME_HEIGHT - 50,
-      "M - MENU",
+      menuLabel,
       {
         fontFamily: "Press Start 2P, monospace",
         fontSize: "14px",
@@ -249,7 +253,7 @@ export class GameOverScene extends Phaser.Scene {
       }
     ).setOrigin(0.5);
 
-    // Input handling
+    // Input handling - keyboard
     this.input.keyboard?.on("keydown-SPACE", () => {
       this.scene.start("GameScene", {
         playerName: this.playerName,
@@ -270,6 +274,47 @@ export class GameOverScene extends Phaser.Scene {
         callbacks: this.callbacks
       });
     });
+
+    // Touch handling
+    if (isMobile) {
+      // Retry button touch
+      const retryBtn = this.add.rectangle(
+        GAME_WIDTH / 2 - 150,
+        GAME_HEIGHT - 50,
+        250,
+        60,
+        0x00ff00,
+        0.2
+      ).setInteractive();
+      retryBtn.on('pointerdown', () => {
+        this.scene.start("GameScene", {
+          playerName: this.playerName,
+          callbacks: this.callbacks
+        });
+      });
+
+      // Menu button touch
+      const menuBtn = this.add.rectangle(
+        GAME_WIDTH / 2 + 150,
+        GAME_HEIGHT - 50,
+        150,
+        60,
+        0x888888,
+        0.2
+      ).setInteractive();
+      menuBtn.on('pointerdown', () => {
+        this.scene.start("MenuScene", {
+          playerName: this.playerName,
+          callbacks: this.callbacks
+        });
+      });
+    }
+  }
+
+  private detectMobile(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0);
   }
 
   private async submitGameScore(score: number): Promise<void> {

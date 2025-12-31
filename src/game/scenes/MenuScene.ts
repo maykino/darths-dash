@@ -13,6 +13,7 @@ export class MenuScene extends Phaser.Scene {
   private nameInput?: HTMLInputElement;
   private callbacks?: GameCallbacks;
   private leaderboard: LeaderboardEntry[] = [];
+  private isMobile = false;
 
   constructor() {
     super({ key: "MenuScene" });
@@ -24,6 +25,9 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Detect mobile
+    this.isMobile = this.detectMobile();
+
     // Create parallax background
     this.createBackground();
 
@@ -84,11 +88,12 @@ export class MenuScene extends Phaser.Scene {
     // Leaderboard panel
     this.createLeaderboardPanel();
 
-    // Start button
+    // Start button - different text for mobile
+    const startMessage = this.isMobile ? "TAP TO START" : "PRESS ENTER TO START";
     const startText = this.add.text(
       GAME_WIDTH / 2,
       GAME_HEIGHT - 40,
-      "PRESS ENTER TO START",
+      startMessage,
       {
         fontFamily: "Press Start 2P, monospace",
         fontSize: "32px",
@@ -105,7 +110,7 @@ export class MenuScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Input handling
+    // Input handling - keyboard
     this.input.keyboard?.on("keydown-ENTER", () => {
       this.startGame();
     });
@@ -114,8 +119,37 @@ export class MenuScene extends Phaser.Scene {
       this.startGame();
     });
 
+    // Touch handling - tap anywhere (except input) to start
+    if (this.isMobile) {
+      // Make the start text interactive
+      startText.setInteractive();
+      startText.on('pointerdown', () => {
+        this.startGame();
+      });
+
+      // Also create a large start button
+      const startBtn = this.add.rectangle(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT - 40,
+        500,
+        80,
+        0x000000,
+        0
+      );
+      startBtn.setInteractive();
+      startBtn.on('pointerdown', () => {
+        this.startGame();
+      });
+    }
+
     // Fetch leaderboard
     this.fetchLeaderboard();
+  }
+
+  private detectMobile(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0);
   }
 
   private createBackground(): void {
@@ -216,12 +250,20 @@ export class MenuScene extends Phaser.Scene {
       color: "#00ffff",
     }).setOrigin(0.5);
 
-    const instructions = [
-      { key: "ARROWS", action: "Move" },
-      { key: "SPACE", action: "Jump (2x)" },
-      { key: "X / Z", action: "Lightsaber" },
-      { key: "ESC", action: "Pause" },
-    ];
+    // Different instructions for mobile vs desktop
+    const instructions = this.isMobile
+      ? [
+          { key: "STICK", action: "Move" },
+          { key: "JUMP", action: "Jump (2x)" },
+          { key: "ATK", action: "Lightsaber" },
+          { key: "||", action: "Pause" },
+        ]
+      : [
+          { key: "ARROWS", action: "Move" },
+          { key: "SPACE", action: "Jump (2x)" },
+          { key: "X / Z", action: "Lightsaber" },
+          { key: "ESC", action: "Pause" },
+        ];
 
     instructions.forEach((inst, i) => {
       this.add.text(panelX - 160, panelY - 60 + i * 45, inst.key, {
