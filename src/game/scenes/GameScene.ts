@@ -243,39 +243,45 @@ export class GameScene extends Phaser.Scene {
     });
 
     // Floating platforms throughout the level
+    // Ground is at ~656, player can jump ~180 pixels with double jump
+    // So platforms should be between 480-600 for easy jumps, 400-480 for double jumps
+    const lowPlatform = groundY - 100; // 556 - easy single jump
+    const midPlatform = groundY - 160; // 496 - needs good timing or double jump
+    const highPlatform = groundY - 220; // 436 - needs double jump
+
     const platformData = [
-      // Section 1: Tutorial area
-      { x: 400, y: 500, type: "static" },
-      { x: 600, y: 400, type: "static" },
-      { x: 300, y: 300, type: "static" },
+      // Section 1: Tutorial area - easy platforms
+      { x: 400, y: lowPlatform, type: "static" },
+      { x: 600, y: midPlatform, type: "static" },
+      { x: 300, y: lowPlatform + 50, type: "static" },
 
       // Section 2: First challenge
-      { x: 1200, y: 450, type: "static" },
-      { x: 1400, y: 350, type: "moving", moveY: true, range: 150 },
-      { x: 1600, y: 250, type: "static" },
+      { x: 1200, y: lowPlatform, type: "static" },
+      { x: 1400, y: midPlatform, type: "moving", moveY: true, range: 80 },
+      { x: 1600, y: lowPlatform, type: "static" },
 
       // Section 3: Gap crossing
-      { x: 2200, y: 400, type: "moving", moveX: true, range: 200 },
-      { x: 2600, y: 350, type: "static" },
-      { x: 2900, y: 450, type: "static" },
+      { x: 2200, y: lowPlatform, type: "moving", moveX: true, range: 200 },
+      { x: 2600, y: midPlatform, type: "static" },
+      { x: 2900, y: lowPlatform, type: "static" },
 
       // Section 4: Vertical challenge
-      { x: 3600, y: 500, type: "static" },
-      { x: 3800, y: 380, type: "moving", moveY: true, range: 120 },
-      { x: 4000, y: 260, type: "static" },
-      { x: 4200, y: 400, type: "static" },
+      { x: 3600, y: lowPlatform, type: "static" },
+      { x: 3800, y: midPlatform, type: "moving", moveY: true, range: 80 },
+      { x: 4000, y: highPlatform, type: "static" },
+      { x: 4200, y: lowPlatform, type: "static" },
 
       // Section 5: Complex platforming
-      { x: 4900, y: 450, type: "static" },
-      { x: 5100, y: 350, type: "moving", moveX: true, range: 150 },
-      { x: 5400, y: 280, type: "static" },
-      { x: 5600, y: 400, type: "static" },
+      { x: 4900, y: lowPlatform, type: "static" },
+      { x: 5100, y: midPlatform, type: "moving", moveX: true, range: 150 },
+      { x: 5400, y: highPlatform, type: "static" },
+      { x: 5600, y: lowPlatform, type: "static" },
 
       // Section 6: Final stretch
-      { x: 6200, y: 420, type: "static" },
-      { x: 6500, y: 320, type: "moving", moveY: true, range: 100 },
-      { x: 6800, y: 250, type: "static" },
-      { x: 7100, y: 380, type: "static" },
+      { x: 6200, y: lowPlatform, type: "static" },
+      { x: 6500, y: midPlatform, type: "moving", moveY: true, range: 80 },
+      { x: 6800, y: highPlatform, type: "static" },
+      { x: 7100, y: lowPlatform, type: "static" },
     ];
 
     platformData.forEach((p) => {

@@ -16,8 +16,8 @@ export const LEVEL_HEIGHT = 720;
 
 // Player constants
 export const PLAYER_SPEED = 280;
-export const PLAYER_JUMP_VELOCITY = -480;
-export const PLAYER_DOUBLE_JUMP_VELOCITY = -400;
+export const PLAYER_JUMP_VELOCITY = -550; // Increased for better platform reach
+export const PLAYER_DOUBLE_JUMP_VELOCITY = -450; // Increased for better platform reach
 export const COYOTE_TIME = 120; // ms
 export const JUMP_BUFFER_TIME = 150; // ms
 export const PLAYER_MAX_HEALTH = 3;
@@ -25,7 +25,7 @@ export const PLAYER_MAX_HEALTH = 3;
 // Combat constants
 export const SABER_DAMAGE = 1;
 export const SABER_COOLDOWN = 400; // ms
-export const SABER_RANGE = 80;
+export const SABER_RANGE = 120; // 50% longer range
 export const SABER_ARC = 120; // degrees
 
 // Enemy constants
