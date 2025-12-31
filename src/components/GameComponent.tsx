@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Phaser from "phaser";
+import * as Phaser from "phaser";
 import { createGameConfig } from "@/game/config/gameConfig";
 
 interface GameComponentProps {
