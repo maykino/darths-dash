@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { GameCallbacks } from "../config/gameConfig";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -6,15 +7,18 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // Load minimal assets needed for the loading screen
-    this.load.setPath("/assets/");
+    // Nothing to preload in boot scene
   }
 
   create(): void {
     // Set up any game-wide settings
     this.scale.refresh();
 
-    // Move to preload scene
-    this.scene.start("PreloadScene");
+    // Get callbacks from registry
+    const callbacks = this.registry.get("callbacks") as GameCallbacks | undefined;
+    const playerName = callbacks?.getPlayerName?.() || "PLAYER";
+
+    // Move to preload scene with data
+    this.scene.start("PreloadScene", { callbacks, playerName });
   }
 }

@@ -2,486 +2,1081 @@ import * as Phaser from "phaser";
 import {
   GAME_WIDTH,
   GAME_HEIGHT,
+  LEVEL_WIDTH,
   PLAYER_SPEED,
   PLAYER_JUMP_VELOCITY,
-  ENEMY_SPEED,
+  PLAYER_DOUBLE_JUMP_VELOCITY,
+  COYOTE_TIME,
+  JUMP_BUFFER_TIME,
+  PLAYER_MAX_HEALTH,
+  SABER_COOLDOWN,
+  SABER_RANGE,
+  PATROL_ENEMY_SPEED,
+  FLYING_ENEMY_SPEED,
+  CAMERA_LERP,
+  PLAYER_SCREEN_X_PERCENT,
+  COLORS,
   CRYSTAL_POINTS,
-  SURVIVAL_POINTS_PER_SECOND,
+  ENEMY_POINTS,
+  TIME_BONUS_BASE,
+  TIME_PENALTY_PER_SECOND,
+  DAMAGE_PENALTY,
+  CHECKPOINT_BONUS,
+  COMPLETION_BONUS,
+  GameStats,
+  GameCallbacks,
 } from "../config/gameConfig";
 
+interface Checkpoint {
+  x: number;
+  y: number;
+  activated: boolean;
+  sprite: Phaser.GameObjects.Image;
+}
+
+interface Enemy {
+  sprite: Phaser.Physics.Arcade.Sprite;
+  type: "patrol" | "flying" | "turret";
+  health: number;
+  patrolStart?: number;
+  patrolEnd?: number;
+  direction?: number;
+}
+
 export class GameScene extends Phaser.Scene {
+  // Player
   private player!: Phaser.Physics.Arcade.Sprite;
+  private lightsaber!: Phaser.GameObjects.Image;
+  private health = PLAYER_MAX_HEALTH;
+  private isInvulnerable = false;
+  private facingRight = true;
+
+  // Combat
+  private canAttack = true;
+  private isAttacking = false;
+  private slashEffect!: Phaser.GameObjects.Image;
+
+  // Jump mechanics
+  private canDoubleJump = true;
+  private lastGroundedTime = 0;
+  private jumpBufferTime = 0;
+
+  // Input
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private spaceKey!: Phaser.Input.Keyboard.Key;
+  private attackKey!: Phaser.Input.Keyboard.Key;
   private escKey!: Phaser.Input.Keyboard.Key;
 
+  // Level elements
   private platforms!: Phaser.Physics.Arcade.StaticGroup;
-  private enemies!: Phaser.Physics.Arcade.Group;
+  private movingPlatforms!: Phaser.Physics.Arcade.Group;
+  private enemies: Enemy[] = [];
   private crystals!: Phaser.Physics.Arcade.Group;
+  private checkpoints: Checkpoint[] = [];
+  private spikes!: Phaser.Physics.Arcade.StaticGroup;
+  private laserBeams!: Phaser.Physics.Arcade.Group;
+  private portal!: Phaser.Physics.Arcade.Sprite;
 
+  // Parallax backgrounds
+  private bgStars!: Phaser.GameObjects.TileSprite;
+  private bgNebula!: Phaser.GameObjects.TileSprite;
+  private bgCity!: Phaser.GameObjects.TileSprite;
+
+  // Stats
   private score = 0;
+  private crystalsCollected = 0;
+  private enemiesDefeated = 0;
+  private checkpointsReached = 0;
+  private damageTaken = 0;
+  private startTime = 0;
+  private lastCheckpointX = 100;
+  private lastCheckpointY = 0;
+
+  // UI
   private scoreText!: Phaser.GameObjects.Text;
-  private lives = 3;
-  private livesText!: Phaser.GameObjects.Text;
-
-  private enemySpawnTimer!: Phaser.Time.TimerEvent;
-  private crystalSpawnTimer!: Phaser.Time.TimerEvent;
-  private scoreTimer!: Phaser.Time.TimerEvent;
-
-  private isInvulnerable = false;
+  private healthDisplay!: Phaser.GameObjects.Container;
   private isPaused = false;
   private pauseOverlay!: Phaser.GameObjects.Container;
 
-  private stars: Phaser.GameObjects.Image[] = [];
-  private gameSpeed = 1;
+  // Particles
+  private sparkEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private crystalEmitter!: Phaser.GameObjects.Particles.ParticleEmitter;
+
+  // Data passed from menu
+  private playerName: string = "PLAYER";
+  private callbacks?: GameCallbacks;
 
   constructor() {
     super({ key: "GameScene" });
   }
 
-  init(): void {
+  init(data: { playerName?: string; callbacks?: GameCallbacks }): void {
+    this.playerName = data.playerName || "PLAYER";
+    this.callbacks = data.callbacks;
+    this.health = PLAYER_MAX_HEALTH;
     this.score = 0;
-    this.lives = 3;
+    this.crystalsCollected = 0;
+    this.enemiesDefeated = 0;
+    this.checkpointsReached = 0;
+    this.damageTaken = 0;
     this.isInvulnerable = false;
+    this.canDoubleJump = true;
+    this.facingRight = true;
     this.isPaused = false;
-    this.gameSpeed = 1;
+    this.enemies = [];
+    this.checkpoints = [];
+    this.lastCheckpointX = 100;
+    this.lastCheckpointY = 0;
   }
 
   create(): void {
-    // Create starfield background
-    this.createStarfield();
+    this.startTime = Date.now();
 
-    // Create ground and platforms
+    // Set world bounds
+    this.physics.world.setBounds(0, 0, LEVEL_WIDTH, GAME_HEIGHT);
+
+    // Create parallax backgrounds
+    this.createBackgrounds();
+
+    // Create level
     this.createLevel();
 
     // Create player
     this.createPlayer();
 
-    // Create enemy and crystal groups
-    this.enemies = this.physics.add.group();
-    this.crystals = this.physics.add.group();
+    // Create enemies and hazards
+    this.createEnemies();
+    this.createHazards();
 
-    // Collisions
-    this.physics.add.collider(this.player, this.platforms);
+    // Create collectibles
+    this.createCrystals();
 
-    // Overlaps
-    this.physics.add.overlap(
-      this.player,
-      this.enemies,
-      this.handleEnemyCollision as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
-      undefined,
-      this
-    );
+    // Create end portal
+    this.createPortal();
 
-    this.physics.add.overlap(
-      this.player,
-      this.crystals,
-      this.handleCrystalCollect as Phaser.Types.Physics.Arcade.ArcadePhysicsCallback,
-      undefined,
-      this
-    );
+    // Setup camera
+    this.setupCamera();
 
-    // Input
-    this.cursors = this.input.keyboard!.createCursorKeys();
-    this.spaceKey = this.input.keyboard!.addKey(
-      Phaser.Input.Keyboard.KeyCodes.SPACE
-    );
-    this.escKey = this.input.keyboard!.addKey(
-      Phaser.Input.Keyboard.KeyCodes.ESC
-    );
-
-    // UI
+    // Create UI
     this.createUI();
 
     // Create pause overlay
     this.createPauseOverlay();
 
-    // Spawn timers
-    this.enemySpawnTimer = this.time.addEvent({
-      delay: 2000,
-      callback: this.spawnEnemy,
-      callbackScope: this,
-      loop: true,
-    });
+    // Setup particles
+    this.setupParticles();
 
-    this.crystalSpawnTimer = this.time.addEvent({
-      delay: 3000,
-      callback: this.spawnCrystal,
-      callbackScope: this,
-      loop: true,
-    });
+    // Input
+    this.cursors = this.input.keyboard!.createCursorKeys();
+    this.attackKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+    this.escKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
-    // Score timer (points for survival)
-    this.scoreTimer = this.time.addEvent({
-      delay: 1000,
-      callback: () => {
-        this.addScore(SURVIVAL_POINTS_PER_SECOND);
-        // Increase difficulty over time
-        this.gameSpeed = Math.min(2, 1 + this.score / 5000);
-      },
-      callbackScope: this,
-      loop: true,
-    });
+    // Also allow Z for attack
+    this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.Z).on("down", () => this.attack());
+    this.attackKey.on("down", () => this.attack());
 
-    // Spawn initial crystal
-    this.time.delayedCall(500, () => this.spawnCrystal());
+    // Setup collisions
+    this.setupCollisions();
   }
 
-  update(): void {
+  update(time: number, delta: number): void {
     if (this.isPaused) {
-      // Check for unpause
       if (Phaser.Input.Keyboard.JustDown(this.escKey)) {
         this.togglePause();
       }
       return;
     }
 
-    // Check for pause
     if (Phaser.Input.Keyboard.JustDown(this.escKey)) {
       this.togglePause();
       return;
     }
 
-    // Update starfield
-    this.updateStarfield();
-
-    // Player movement
-    this.handlePlayerMovement();
-
-    // Update enemies
-    this.updateEnemies();
-
-    // Update crystals
-    this.updateCrystals();
-
-    // Check if player fell off the world
-    if (this.player.y > GAME_HEIGHT + 50) {
-      this.handlePlayerDeath();
-    }
+    this.updatePlayer(time, delta);
+    this.updateEnemies(delta);
+    this.updateMovingPlatforms(time);
+    this.updateLasers(time);
+    this.updateParallax();
+    this.updateUI();
   }
 
-  private createStarfield(): void {
-    for (let i = 0; i < 30; i++) {
-      const x = Phaser.Math.Between(0, GAME_WIDTH);
-      const y = Phaser.Math.Between(0, GAME_HEIGHT - 100);
-      const star = this.add.image(x, y, "star");
-      star.setScale(0.3 + Math.random() * 0.4);
-      star.setAlpha(0.2 + Math.random() * 0.5);
-      star.setDepth(-1);
-      this.stars.push(star);
-    }
-  }
+  private createBackgrounds(): void {
+    // Stars (furthest, slowest)
+    this.bgStars = this.add.tileSprite(0, 0, LEVEL_WIDTH * 2, GAME_HEIGHT, "bg_stars");
+    this.bgStars.setOrigin(0, 0);
+    this.bgStars.setScrollFactor(0);
+    this.bgStars.setDepth(-100);
 
-  private updateStarfield(): void {
-    this.stars.forEach((star, index) => {
-      star.x -= (0.5 + (index % 3) * 0.3) * this.gameSpeed;
-      if (star.x < -10) {
-        star.x = GAME_WIDTH + 10;
-        star.y = Phaser.Math.Between(0, GAME_HEIGHT - 100);
-      }
-    });
+    // Nebula
+    this.bgNebula = this.add.tileSprite(0, 0, LEVEL_WIDTH * 2, GAME_HEIGHT, "bg_nebula");
+    this.bgNebula.setOrigin(0, 0);
+    this.bgNebula.setScrollFactor(0);
+    this.bgNebula.setDepth(-90);
+
+    // City (closest background)
+    this.bgCity = this.add.tileSprite(0, 0, LEVEL_WIDTH * 2, GAME_HEIGHT, "bg_city");
+    this.bgCity.setOrigin(0, 0);
+    this.bgCity.setScrollFactor(0);
+    this.bgCity.setDepth(-80);
   }
 
   private createLevel(): void {
     this.platforms = this.physics.add.staticGroup();
+    this.movingPlatforms = this.physics.add.group({ allowGravity: false });
 
-    // Create ground
-    for (let x = 0; x < GAME_WIDTH + 64; x += 64) {
-      const ground = this.platforms.create(x, GAME_HEIGHT - 16, "ground");
-      ground.setOrigin(0, 0.5);
-      ground.refreshBody();
-    }
-
-    // Create some floating platforms
-    const platformPositions = [
-      { x: 200, y: 350 },
-      { x: 450, y: 280 },
-      { x: 650, y: 350 },
-      { x: 100, y: 220 },
-      { x: 550, y: 180 },
+    // Ground - spans the level with gaps
+    const groundY = GAME_HEIGHT - 64;
+    const groundSegments = [
+      { start: 0, end: 800 },
+      { start: 900, end: 1800 },
+      { start: 2000, end: 3200 },
+      { start: 3400, end: 4500 },
+      { start: 4700, end: 5800 },
+      { start: 6000, end: 7200 },
+      { start: 7400, end: LEVEL_WIDTH },
     ];
 
-    platformPositions.forEach((pos) => {
-      const platform = this.platforms.create(pos.x, pos.y, "platform");
-      platform.refreshBody();
+    groundSegments.forEach((seg) => {
+      for (let x = seg.start; x < seg.end; x += 64) {
+        const ground = this.platforms.create(x + 32, groundY + 32, "ground");
+        ground.setScale(1).refreshBody();
+      }
     });
+
+    // Floating platforms throughout the level
+    const platformData = [
+      // Section 1: Tutorial area
+      { x: 400, y: 500, type: "static" },
+      { x: 600, y: 400, type: "static" },
+      { x: 300, y: 300, type: "static" },
+
+      // Section 2: First challenge
+      { x: 1200, y: 450, type: "static" },
+      { x: 1400, y: 350, type: "moving", moveY: true, range: 150 },
+      { x: 1600, y: 250, type: "static" },
+
+      // Section 3: Gap crossing
+      { x: 2200, y: 400, type: "moving", moveX: true, range: 200 },
+      { x: 2600, y: 350, type: "static" },
+      { x: 2900, y: 450, type: "static" },
+
+      // Section 4: Vertical challenge
+      { x: 3600, y: 500, type: "static" },
+      { x: 3800, y: 380, type: "moving", moveY: true, range: 120 },
+      { x: 4000, y: 260, type: "static" },
+      { x: 4200, y: 400, type: "static" },
+
+      // Section 5: Complex platforming
+      { x: 4900, y: 450, type: "static" },
+      { x: 5100, y: 350, type: "moving", moveX: true, range: 150 },
+      { x: 5400, y: 280, type: "static" },
+      { x: 5600, y: 400, type: "static" },
+
+      // Section 6: Final stretch
+      { x: 6200, y: 420, type: "static" },
+      { x: 6500, y: 320, type: "moving", moveY: true, range: 100 },
+      { x: 6800, y: 250, type: "static" },
+      { x: 7100, y: 380, type: "static" },
+    ];
+
+    platformData.forEach((p) => {
+      if (p.type === "static") {
+        const platform = this.platforms.create(p.x, p.y, "platform");
+        platform.setScale(1).refreshBody();
+      } else if (p.type === "moving") {
+        const platform = this.movingPlatforms.create(p.x, p.y, "moving_platform") as Phaser.Physics.Arcade.Sprite;
+        platform.setImmovable(true);
+        (platform.body as Phaser.Physics.Arcade.Body).allowGravity = false;
+
+        const tweenConfig: Phaser.Types.Tweens.TweenBuilderConfig = {
+          targets: platform,
+          duration: 2000,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        };
+
+        if (p.moveX) {
+          tweenConfig.x = p.x + (p.range || 100);
+        }
+        if (p.moveY) {
+          tweenConfig.y = p.y + (p.range || 100);
+        }
+
+        this.tweens.add(tweenConfig);
+      }
+    });
+
+    // Create checkpoints
+    const checkpointPositions = [
+      { x: 1800, y: groundY - 40 },
+      { x: 3200, y: groundY - 40 },
+      { x: 5000, y: groundY - 40 },
+      { x: 6800, y: groundY - 40 },
+    ];
+
+    checkpointPositions.forEach((pos) => {
+      const sprite = this.add.image(pos.x, pos.y, "checkpoint").setOrigin(0.5, 1);
+      this.checkpoints.push({
+        x: pos.x,
+        y: pos.y - 40,
+        activated: false,
+        sprite,
+      });
+    });
+
+    // Set initial checkpoint
+    this.lastCheckpointY = groundY - 80;
   }
 
   private createPlayer(): void {
-    this.player = this.physics.add.sprite(100, GAME_HEIGHT - 100, "vader");
-    this.player.setBounce(0.1);
+    this.player = this.physics.add.sprite(this.lastCheckpointX, this.lastCheckpointY, "vader");
     this.player.setCollideWorldBounds(true);
-    this.player.setSize(32, 56);
-    this.player.setOffset(8, 4);
-    this.player.play("vader-idle");
+    this.player.setSize(40, 70);
+    this.player.setOffset(12, 8);
+    this.player.setDepth(10);
+
+    // Lightsaber
+    this.lightsaber = this.add.image(0, 0, "lightsaber");
+    this.lightsaber.setOrigin(0.5, 1);
+    this.lightsaber.setDepth(11);
+    this.lightsaber.setVisible(true);
+
+    // Slash effect (hidden initially)
+    this.slashEffect = this.add.image(0, 0, "saber_slash");
+    this.slashEffect.setVisible(false);
+    this.slashEffect.setDepth(12);
+  }
+
+  private createEnemies(): void {
+    const enemyData = [
+      // Patrol enemies (Baby Yodas in cars)
+      { x: 600, y: GAME_HEIGHT - 128, type: "patrol" as const, patrolRange: 200 },
+      { x: 1400, y: GAME_HEIGHT - 128, type: "patrol" as const, patrolRange: 300 },
+      { x: 2400, y: GAME_HEIGHT - 128, type: "patrol" as const, patrolRange: 250 },
+      { x: 3600, y: GAME_HEIGHT - 128, type: "patrol" as const, patrolRange: 200 },
+      { x: 4400, y: GAME_HEIGHT - 128, type: "patrol" as const, patrolRange: 300 },
+      { x: 5400, y: GAME_HEIGHT - 128, type: "patrol" as const, patrolRange: 250 },
+      { x: 6400, y: GAME_HEIGHT - 128, type: "patrol" as const, patrolRange: 200 },
+
+      // Flying droids
+      { x: 1000, y: 300, type: "flying" as const },
+      { x: 2200, y: 250, type: "flying" as const },
+      { x: 3400, y: 280, type: "flying" as const },
+      { x: 4800, y: 220, type: "flying" as const },
+      { x: 5800, y: 300, type: "flying" as const },
+      { x: 7000, y: 260, type: "flying" as const },
+    ];
+
+    enemyData.forEach((e) => {
+      const texture = e.type === "patrol" ? "yoda_car" : "droid";
+      const sprite = this.physics.add.sprite(e.x, e.y, texture);
+      (sprite.body as Phaser.Physics.Arcade.Body).allowGravity = e.type === "patrol";
+      sprite.setImmovable(e.type === "flying");
+
+      const enemy: Enemy = {
+        sprite,
+        type: e.type,
+        health: 1,
+        direction: 1,
+      };
+
+      if (e.type === "patrol" && e.patrolRange) {
+        enemy.patrolStart = e.x - e.patrolRange / 2;
+        enemy.patrolEnd = e.x + e.patrolRange / 2;
+        sprite.setVelocityX(PATROL_ENEMY_SPEED);
+      } else if (e.type === "flying") {
+        // Flying enemies move in a sine wave pattern
+        this.tweens.add({
+          targets: sprite,
+          y: e.y + 80,
+          duration: 2000,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+        sprite.setVelocityX(-FLYING_ENEMY_SPEED);
+      }
+
+      this.enemies.push(enemy);
+    });
+  }
+
+  private createHazards(): void {
+    this.spikes = this.physics.add.staticGroup();
+    this.laserBeams = this.physics.add.group({ allowGravity: false });
+
+    // Spike positions (in gaps and on platforms)
+    const spikePositions = [
+      // Gap spikes
+      { x: 850, y: GAME_HEIGHT - 20 },
+      { x: 882, y: GAME_HEIGHT - 20 },
+      { x: 1950, y: GAME_HEIGHT - 20 },
+      { x: 1982, y: GAME_HEIGHT - 20 },
+      { x: 3350, y: GAME_HEIGHT - 20 },
+      { x: 3382, y: GAME_HEIGHT - 20 },
+      { x: 4650, y: GAME_HEIGHT - 20 },
+      { x: 4682, y: GAME_HEIGHT - 20 },
+      { x: 5950, y: GAME_HEIGHT - 20 },
+      { x: 5982, y: GAME_HEIGHT - 20 },
+    ];
+
+    spikePositions.forEach((pos) => {
+      const spike = this.spikes.create(pos.x, pos.y, "spike");
+      spike.setOrigin(0.5, 1);
+      spike.refreshBody();
+    });
+
+    // Laser turrets
+    const turretPositions = [
+      { x: 1600, y: GAME_HEIGHT - 64, interval: 2000, duration: 1000 },
+      { x: 3000, y: GAME_HEIGHT - 64, interval: 2500, duration: 1200 },
+      { x: 5200, y: GAME_HEIGHT - 64, interval: 1800, duration: 800 },
+      { x: 6600, y: GAME_HEIGHT - 64, interval: 2200, duration: 1000 },
+    ];
+
+    turretPositions.forEach((t) => {
+      // Add turret sprite
+      this.add.image(t.x, t.y, "turret").setOrigin(0.5, 1);
+
+      // Create laser beam that toggles
+      const laser = this.laserBeams.create(t.x + 24, t.y - 40, "laser_beam") as Phaser.Physics.Arcade.Sprite;
+      laser.setOrigin(0, 0.5);
+      (laser.body as Phaser.Physics.Arcade.Body).allowGravity = false;
+      laser.setVisible(false);
+      laser.setActive(false);
+
+      // Store timing data
+      laser.setData("interval", t.interval);
+      laser.setData("duration", t.duration);
+      laser.setData("nextActivation", t.interval);
+      laser.setData("deactivateAt", 0);
+    });
+  }
+
+  private createCrystals(): void {
+    this.crystals = this.physics.add.group({ allowGravity: false });
+
+    const crystalPositions = [
+      // Section 1
+      { x: 200, y: 550 }, { x: 400, y: 450 }, { x: 600, y: 350 },
+      // Section 2
+      { x: 1200, y: 400 }, { x: 1400, y: 300 }, { x: 1600, y: 200 },
+      // Section 3
+      { x: 2100, y: 550 }, { x: 2400, y: 350 }, { x: 2800, y: 300 },
+      // Section 4
+      { x: 3500, y: 550 }, { x: 3800, y: 330 }, { x: 4100, y: 210 },
+      // Section 5
+      { x: 4800, y: 550 }, { x: 5100, y: 300 }, { x: 5500, y: 230 },
+      // Section 6
+      { x: 6100, y: 550 }, { x: 6400, y: 370 }, { x: 6900, y: 200 },
+      // Final area
+      { x: 7200, y: 400 }, { x: 7400, y: 300 }, { x: 7600, y: 350 },
+    ];
+
+    crystalPositions.forEach((pos) => {
+      const crystal = this.crystals.create(pos.x, pos.y, "crystal") as Phaser.Physics.Arcade.Sprite;
+      (crystal.body as Phaser.Physics.Arcade.Body).allowGravity = false;
+
+      // Floating animation
+      this.tweens.add({
+        targets: crystal,
+        y: pos.y - 10,
+        duration: 1000,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.easeInOut",
+      });
+    });
+  }
+
+  private createPortal(): void {
+    this.portal = this.physics.add.sprite(LEVEL_WIDTH - 150, GAME_HEIGHT - 192, "portal");
+    (this.portal.body as Phaser.Physics.Arcade.Body).allowGravity = false;
+    this.portal.setImmovable(true);
+
+    // Portal pulsing animation
+    this.tweens.add({
+      targets: this.portal,
+      scaleX: 1.1,
+      scaleY: 1.1,
+      alpha: 0.8,
+      duration: 1000,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+  }
+
+  private setupCamera(): void {
+    this.cameras.main.setBounds(0, 0, LEVEL_WIDTH, GAME_HEIGHT);
+    this.cameras.main.startFollow(this.player, true, CAMERA_LERP, CAMERA_LERP);
+    this.cameras.main.setFollowOffset(-GAME_WIDTH * (0.5 - PLAYER_SCREEN_X_PERCENT), 0);
   }
 
   private createUI(): void {
-    // Score
-    this.scoreText = this.add.text(16, 16, "SCORE: 0", {
-      fontFamily: "Press Start 2P, monospace",
-      fontSize: "14px",
-      color: "#ffffff",
+    // Score text (fixed to camera)
+    this.scoreText = this.add.text(20, 20, "SCORE: 0", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "24px",
+      color: "#00d4ff",
       stroke: "#000000",
-      strokeThickness: 2,
+      strokeThickness: 3,
     });
+    this.scoreText.setScrollFactor(0);
+    this.scoreText.setDepth(100);
 
-    // Lives
-    this.livesText = this.add.text(GAME_WIDTH - 16, 16, "LIVES: 3", {
-      fontFamily: "Press Start 2P, monospace",
-      fontSize: "14px",
-      color: "#ff0000",
-      stroke: "#000000",
-      strokeThickness: 2,
+    // Crystal counter
+    const crystalIcon = this.add.image(20, 60, "crystal").setScale(0.6).setOrigin(0, 0.5);
+    crystalIcon.setScrollFactor(0);
+    crystalIcon.setDepth(100);
+
+    const crystalText = this.add.text(50, 60, "x 0", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "20px",
+      color: "#00d4ff",
     });
-    this.livesText.setOrigin(1, 0);
+    crystalText.setScrollFactor(0);
+    crystalText.setDepth(100);
+    crystalText.setName("crystalText");
+
+    // Health display
+    this.healthDisplay = this.add.container(GAME_WIDTH - 150, 30);
+    this.healthDisplay.setScrollFactor(0);
+    this.healthDisplay.setDepth(100);
+    this.updateHealthDisplay();
+
+    // Controls hint
+    const controlsText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 30, "ARROWS: Move | SPACE: Jump | X/Z: Attack | ESC: Pause", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "14px",
+      color: "#888899",
+    });
+    controlsText.setOrigin(0.5);
+    controlsText.setScrollFactor(0);
+    controlsText.setDepth(100);
+
+    // Fade out controls hint after 5 seconds
+    this.time.delayedCall(5000, () => {
+      this.tweens.add({
+        targets: controlsText,
+        alpha: 0,
+        duration: 1000,
+      });
+    });
+  }
+
+  private updateHealthDisplay(): void {
+    this.healthDisplay.removeAll(true);
+
+    for (let i = 0; i < PLAYER_MAX_HEALTH; i++) {
+      const heart = this.add.image(i * 40, 0, i < this.health ? "heart" : "heart_empty");
+      heart.setScale(0.8);
+      this.healthDisplay.add(heart);
+    }
   }
 
   private createPauseOverlay(): void {
-    const overlay = this.add.rectangle(
-      GAME_WIDTH / 2,
-      GAME_HEIGHT / 2,
-      GAME_WIDTH,
-      GAME_HEIGHT,
-      0x000000,
-      0.7
-    );
+    const overlay = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.8);
 
-    const pauseText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, "PAUSED", {
-      fontFamily: "Press Start 2P, monospace",
-      fontSize: "32px",
+    const pauseText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 80, "PAUSED", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "48px",
       color: "#ffffff",
     });
     pauseText.setOrigin(0.5);
 
-    const resumeText = this.add.text(
-      GAME_WIDTH / 2,
-      GAME_HEIGHT / 2 + 30,
-      "Press ESC to resume",
-      {
-        fontFamily: "Press Start 2P, monospace",
-        fontSize: "12px",
-        color: "#ffff00",
-      }
-    );
+    const resumeText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, "Press ESC to Resume", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "24px",
+      color: "#00d4ff",
+    });
     resumeText.setOrigin(0.5);
 
-    this.pauseOverlay = this.add.container(0, 0, [
-      overlay,
-      pauseText,
-      resumeText,
-    ]);
+    const restartText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 50, "Press R to Restart", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "20px",
+      color: "#888899",
+    });
+    restartText.setOrigin(0.5);
+
+    const creditText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 120, "Designed by Tatus and Jacob", {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "16px",
+      color: "#aa00ff",
+    });
+    creditText.setOrigin(0.5);
+
+    this.pauseOverlay = this.add.container(0, 0, [overlay, pauseText, resumeText, restartText, creditText]);
+    this.pauseOverlay.setScrollFactor(0);
+    this.pauseOverlay.setDepth(200);
     this.pauseOverlay.setVisible(false);
-    this.pauseOverlay.setDepth(100);
   }
 
-  private handlePlayerMovement(): void {
-    const onGround = this.player.body?.touching.down || false;
+  private setupParticles(): void {
+    // Spark particles for hits
+    this.sparkEmitter = this.add.particles(0, 0, "spark", {
+      speed: { min: 100, max: 200 },
+      scale: { start: 0.5, end: 0 },
+      lifespan: 300,
+      blendMode: "ADD",
+      emitting: false,
+    });
+    this.sparkEmitter.setDepth(50);
+
+    // Crystal collect particles
+    this.crystalEmitter = this.add.particles(0, 0, "particle", {
+      speed: { min: 50, max: 150 },
+      scale: { start: 0.5, end: 0 },
+      lifespan: 500,
+      tint: COLORS.neonBlue,
+      blendMode: "ADD",
+      emitting: false,
+    });
+    this.crystalEmitter.setDepth(50);
+  }
+
+  private setupCollisions(): void {
+    // Player vs platforms
+    this.physics.add.collider(this.player, this.platforms);
+    this.physics.add.collider(this.player, this.movingPlatforms);
+
+    // Enemies vs platforms
+    this.enemies.forEach((e) => {
+      if (e.type === "patrol") {
+        this.physics.add.collider(e.sprite, this.platforms);
+      }
+    });
+
+    // Player vs crystals
+    this.physics.add.overlap(this.player, this.crystals, (_player, crystal) => {
+      this.collectCrystal(crystal as Phaser.Physics.Arcade.Sprite);
+    }, undefined, this);
+
+    // Player vs spikes
+    this.physics.add.overlap(this.player, this.spikes, () => {
+      this.hitHazard();
+    }, undefined, this);
+
+    // Player vs lasers
+    this.physics.add.overlap(this.player, this.laserBeams, (_player, laser) => {
+      this.hitLaser(laser as Phaser.Physics.Arcade.Sprite);
+    }, undefined, this);
+
+    // Player vs enemies
+    this.enemies.forEach((e) => {
+      this.physics.add.overlap(this.player, e.sprite, () => this.hitEnemy(e), undefined, this);
+    });
+
+    // Player vs portal
+    this.physics.add.overlap(this.player, this.portal, () => {
+      this.reachPortal();
+    }, undefined, this);
+  }
+
+  private updatePlayer(time: number, delta: number): void {
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    const onGround = body.blocked.down || body.touching.down;
+
+    // Track grounded time for coyote time
+    if (onGround) {
+      this.lastGroundedTime = time;
+      this.canDoubleJump = true;
+    }
+
+    const canCoyoteJump = time - this.lastGroundedTime < COYOTE_TIME;
 
     // Horizontal movement
     if (this.cursors.left.isDown) {
       this.player.setVelocityX(-PLAYER_SPEED);
-      this.player.setFlipX(true);
-      if (onGround) this.player.play("vader-run", true);
+      this.facingRight = false;
+      if (onGround) this.player.play("vader_run", true);
     } else if (this.cursors.right.isDown) {
       this.player.setVelocityX(PLAYER_SPEED);
-      this.player.setFlipX(false);
-      if (onGround) this.player.play("vader-run", true);
+      this.facingRight = true;
+      if (onGround) this.player.play("vader_run", true);
     } else {
       this.player.setVelocityX(0);
-      if (onGround) this.player.play("vader-idle", true);
+      if (onGround) this.player.play("vader_idle", true);
     }
 
-    // Jumping
-    if (
-      (this.cursors.up.isDown || this.spaceKey.isDown) &&
-      onGround
-    ) {
-      this.player.setVelocityY(PLAYER_JUMP_VELOCITY);
+    // Flip player sprite
+    this.player.setFlipX(!this.facingRight);
+
+    // Jump buffer
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.cursors.space!)) {
+      this.jumpBufferTime = time;
     }
-  }
 
-  private spawnEnemy(): void {
-    const y = Phaser.Math.Between(80, GAME_HEIGHT - 150);
-    const enemy = this.enemies.create(
-      GAME_WIDTH + 50,
-      y,
-      "babyYoda"
-    ) as Phaser.Physics.Arcade.Sprite;
+    const jumpBuffered = time - this.jumpBufferTime < JUMP_BUFFER_TIME;
 
-    enemy.setVelocityX(-ENEMY_SPEED * this.gameSpeed);
-    (enemy.body as Phaser.Physics.Arcade.Body).allowGravity = false;
-    enemy.play("yoda-fly");
-
-    // Add floating motion
-    this.tweens.add({
-      targets: enemy,
-      y: enemy.y + Phaser.Math.Between(-30, 30),
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
-  }
-
-  private spawnCrystal(): void {
-    const x = Phaser.Math.Between(100, GAME_WIDTH - 100);
-    const y = Phaser.Math.Between(100, GAME_HEIGHT - 150);
-
-    const crystal = this.crystals.create(
-      x,
-      y,
-      "crystal"
-    ) as Phaser.Physics.Arcade.Sprite;
-
-    (crystal.body as Phaser.Physics.Arcade.Body).allowGravity = false;
-    crystal.play("crystal-sparkle");
-
-    // Add floating animation
-    this.tweens.add({
-      targets: crystal,
-      y: crystal.y - 10,
-      duration: 1000,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
-
-    // Add sparkle effect
-    this.tweens.add({
-      targets: crystal,
-      alpha: { from: 1, to: 0.6 },
-      duration: 500,
-      yoyo: true,
-      repeat: -1,
-    });
-  }
-
-  private updateEnemies(): void {
-    this.enemies.getChildren().forEach((enemy) => {
-      const sprite = enemy as Phaser.Physics.Arcade.Sprite;
-      if (sprite.x < -100) {
-        sprite.destroy();
-      }
-    });
-  }
-
-  private updateCrystals(): void {
-    // Crystals stay until collected, but limit total number
-    if (this.crystals.getLength() > 5) {
-      const oldest = this.crystals.getFirstAlive();
-      if (oldest) {
-        (oldest as Phaser.Physics.Arcade.Sprite).destroy();
+    // Jump
+    if (jumpBuffered) {
+      if (onGround || canCoyoteJump) {
+        this.player.setVelocityY(PLAYER_JUMP_VELOCITY);
+        this.player.play("vader_jump", true);
+        this.jumpBufferTime = 0;
+        this.lastGroundedTime = 0;
+      } else if (this.canDoubleJump) {
+        this.player.setVelocityY(PLAYER_DOUBLE_JUMP_VELOCITY);
+        this.player.play("vader_jump", true);
+        this.canDoubleJump = false;
+        this.jumpBufferTime = 0;
       }
     }
-  }
 
-  private handleEnemyCollision(
-    player: Phaser.Types.Physics.Arcade.GameObjectWithBody,
-    enemy: Phaser.Types.Physics.Arcade.GameObjectWithBody
-  ): void {
-    if (this.isInvulnerable) return;
+    // Air animation
+    if (!onGround && body.velocity.y !== 0) {
+      this.player.play("vader_jump", true);
+    }
 
-    const enemySprite = enemy as Phaser.Physics.Arcade.Sprite;
-    enemySprite.destroy();
+    // Update lightsaber position
+    const saberOffsetX = this.facingRight ? 30 : -30;
+    this.lightsaber.setPosition(this.player.x + saberOffsetX, this.player.y - 10);
+    this.lightsaber.setFlipX(!this.facingRight);
+    this.lightsaber.setRotation(this.facingRight ? 0.3 : -0.3);
 
-    this.lives--;
-    this.livesText.setText(`LIVES: ${this.lives}`);
+    // Check checkpoints
+    this.checkCheckpoints();
 
-    if (this.lives <= 0) {
-      this.gameOver();
-    } else {
-      // Become invulnerable briefly
-      this.isInvulnerable = true;
-      this.player.setTint(0xff0000);
-
-      // Flash effect
-      this.tweens.add({
-        targets: this.player,
-        alpha: { from: 0.3, to: 1 },
-        duration: 100,
-        repeat: 10,
-        onComplete: () => {
-          this.isInvulnerable = false;
-          this.player.clearTint();
-          this.player.setAlpha(1);
-        },
-      });
-
-      // Screen shake
-      this.cameras.main.shake(200, 0.01);
+    // Fall death
+    if (this.player.y > GAME_HEIGHT + 50) {
+      this.takeDamage();
+      this.respawnAtCheckpoint();
     }
   }
 
-  private handleCrystalCollect(
-    player: Phaser.Types.Physics.Arcade.GameObjectWithBody,
-    crystal: Phaser.Types.Physics.Arcade.GameObjectWithBody
-  ): void {
-    const crystalSprite = crystal as Phaser.Physics.Arcade.Sprite;
+  private attack(): void {
+    if (!this.canAttack || this.isAttacking) return;
 
-    // Pop effect
+    this.isAttacking = true;
+    this.canAttack = false;
+
+    // Show slash effect
+    const slashOffsetX = this.facingRight ? 50 : -50;
+    this.slashEffect.setPosition(this.player.x + slashOffsetX, this.player.y);
+    this.slashEffect.setFlipX(!this.facingRight);
+    this.slashEffect.setVisible(true);
+    this.slashEffect.setAlpha(1);
+
+    // Animate lightsaber
+    const targetRotation = this.facingRight ? -1.2 : 1.2;
     this.tweens.add({
-      targets: crystalSprite,
-      scaleX: 1.5,
-      scaleY: 1.5,
+      targets: this.lightsaber,
+      rotation: targetRotation,
+      duration: 100,
+      yoyo: true,
+    });
+
+    // Check for enemy hits
+    this.enemies.forEach((enemy) => {
+      if (enemy.sprite.active) {
+        const distance = Phaser.Math.Distance.Between(
+          this.player.x,
+          this.player.y,
+          enemy.sprite.x,
+          enemy.sprite.y
+        );
+
+        const inFront = this.facingRight
+          ? enemy.sprite.x > this.player.x
+          : enemy.sprite.x < this.player.x;
+
+        if (distance < SABER_RANGE && inFront) {
+          this.destroyEnemy(enemy);
+        }
+      }
+    });
+
+    // Fade out slash effect
+    this.tweens.add({
+      targets: this.slashEffect,
       alpha: 0,
       duration: 200,
       onComplete: () => {
-        crystalSprite.destroy();
+        this.slashEffect.setVisible(false);
+        this.isAttacking = false;
       },
     });
 
+    // Cooldown
+    this.time.delayedCall(SABER_COOLDOWN, () => {
+      this.canAttack = true;
+    });
+  }
+
+  private destroyEnemy(enemy: Enemy): void {
+    // Spark effect
+    this.sparkEmitter.setPosition(enemy.sprite.x, enemy.sprite.y);
+    this.sparkEmitter.explode(10);
+
+    // Camera shake
+    this.cameras.main.shake(100, 0.005);
+
+    // Update stats
+    this.enemiesDefeated++;
+    this.addScore(ENEMY_POINTS);
+
+    // Destroy enemy
+    enemy.sprite.destroy();
+    enemy.sprite.setActive(false);
+  }
+
+  private updateEnemies(delta: number): void {
+    this.enemies.forEach((enemy) => {
+      if (!enemy.sprite.active) return;
+
+      if (enemy.type === "patrol") {
+        // Patrol behavior
+        if (enemy.patrolStart !== undefined && enemy.patrolEnd !== undefined) {
+          if (enemy.sprite.x <= enemy.patrolStart) {
+            enemy.direction = 1;
+            enemy.sprite.setVelocityX(PATROL_ENEMY_SPEED);
+            enemy.sprite.setFlipX(false);
+          } else if (enemy.sprite.x >= enemy.patrolEnd) {
+            enemy.direction = -1;
+            enemy.sprite.setVelocityX(-PATROL_ENEMY_SPEED);
+            enemy.sprite.setFlipX(true);
+          }
+        }
+      } else if (enemy.type === "flying") {
+        // Flying enemies wrap around
+        if (enemy.sprite.x < -50) {
+          enemy.sprite.x = LEVEL_WIDTH + 50;
+        }
+      }
+    });
+  }
+
+  private updateMovingPlatforms(time: number): void {
+    // Moving platforms are handled by tweens, but we need to
+    // ensure player moves with platform
+    const body = this.player.body as Phaser.Physics.Arcade.Body;
+    if (body.touching.down) {
+      this.movingPlatforms.getChildren().forEach((platform) => {
+        const p = platform as Phaser.Physics.Arcade.Sprite;
+        const pBody = p.body as Phaser.Physics.Arcade.Body;
+        if (pBody && this.physics.overlap(this.player, p)) {
+          // Player is on this moving platform
+          this.player.x += pBody.velocity.x * 0.016;
+        }
+      });
+    }
+  }
+
+  private updateLasers(time: number): void {
+    this.laserBeams.getChildren().forEach((laser) => {
+      const l = laser as Phaser.Physics.Arcade.Sprite;
+      const interval = l.getData("interval") as number;
+      const duration = l.getData("duration") as number;
+
+      const elapsed = time % (interval + duration);
+
+      if (elapsed < duration) {
+        // Laser should be active
+        if (!l.visible) {
+          l.setVisible(true);
+          l.setActive(true);
+          (l.body as Phaser.Physics.Arcade.Body).enable = true;
+        }
+      } else {
+        // Laser should be inactive
+        if (l.visible) {
+          l.setVisible(false);
+          l.setActive(false);
+          (l.body as Phaser.Physics.Arcade.Body).enable = false;
+        }
+      }
+    });
+  }
+
+  private updateParallax(): void {
+    const camX = this.cameras.main.scrollX;
+    this.bgStars.tilePositionX = camX * 0.1;
+    this.bgNebula.tilePositionX = camX * 0.2;
+    this.bgCity.tilePositionX = camX * 0.4;
+  }
+
+  private updateUI(): void {
+    this.scoreText.setText(`SCORE: ${this.score}`);
+
+    const crystalText = this.children.getByName("crystalText") as Phaser.GameObjects.Text;
+    if (crystalText) {
+      crystalText.setText(`x ${this.crystalsCollected}`);
+    }
+  }
+
+  private collectCrystal(crystal: Phaser.Physics.Arcade.Sprite): void {
+    const c = crystal;
+
+    // Particle effect
+    this.crystalEmitter.setPosition(c.x, c.y);
+    this.crystalEmitter.explode(8);
+
+    // Update stats
+    this.crystalsCollected++;
     this.addScore(CRYSTAL_POINTS);
 
-    // Show floating score text
-    const scorePopup = this.add.text(
-      crystalSprite.x,
-      crystalSprite.y,
-      `+${CRYSTAL_POINTS}`,
-      {
-        fontFamily: "Press Start 2P, monospace",
-        fontSize: "12px",
-        color: "#00bfff",
-      }
-    );
+    // Show floating score
+    const scorePopup = this.add.text(c.x, c.y - 20, `+${CRYSTAL_POINTS}`, {
+      fontFamily: "Arial, sans-serif",
+      fontSize: "18px",
+      color: "#00d4ff",
+    });
     scorePopup.setOrigin(0.5);
 
     this.tweens.add({
       targets: scorePopup,
-      y: scorePopup.y - 30,
+      y: scorePopup.y - 40,
       alpha: 0,
       duration: 800,
+      onComplete: () => scorePopup.destroy(),
+    });
+
+    c.destroy();
+  }
+
+  private checkCheckpoints(): void {
+    this.checkpoints.forEach((cp) => {
+      if (!cp.activated && Math.abs(this.player.x - cp.x) < 40) {
+        cp.activated = true;
+        cp.sprite.setTexture("checkpoint_active");
+        this.lastCheckpointX = cp.x;
+        this.lastCheckpointY = cp.y;
+        this.checkpointsReached++;
+        this.addScore(CHECKPOINT_BONUS);
+
+        // Checkpoint effect
+        const text = this.add.text(cp.x, cp.y - 60, "CHECKPOINT!", {
+          fontFamily: "Arial, sans-serif",
+          fontSize: "20px",
+          color: "#00ff88",
+        });
+        text.setOrigin(0.5);
+
+        this.tweens.add({
+          targets: text,
+          y: text.y - 30,
+          alpha: 0,
+          duration: 1500,
+          onComplete: () => text.destroy(),
+        });
+      }
+    });
+  }
+
+  private hitEnemy(enemy: Enemy): void {
+    if (this.isInvulnerable || !enemy.sprite.active) return;
+
+    // Check if player is attacking
+    if (this.isAttacking) {
+      this.destroyEnemy(enemy);
+      return;
+    }
+
+    this.takeDamage();
+  }
+
+  private hitHazard(): void {
+    if (this.isInvulnerable) return;
+    this.takeDamage();
+    this.respawnAtCheckpoint();
+  }
+
+  private hitLaser(laser: Phaser.Physics.Arcade.Sprite): void {
+    const l = laser;
+    if (this.isInvulnerable || !l.visible) return;
+    this.takeDamage();
+
+    // Knockback
+    const knockbackDir = this.player.x < l.x ? -1 : 1;
+    this.player.setVelocityX(knockbackDir * 300);
+    this.player.setVelocityY(-200);
+  }
+
+  private takeDamage(): void {
+    if (this.isInvulnerable) return;
+
+    this.health--;
+    this.damageTaken++;
+    this.updateHealthDisplay();
+
+    if (this.health <= 0) {
+      this.gameOver();
+      return;
+    }
+
+    // Invulnerability frames
+    this.isInvulnerable = true;
+    this.player.setTint(0xff0000);
+
+    // Flash effect
+    this.tweens.add({
+      targets: this.player,
+      alpha: { from: 0.3, to: 1 },
+      duration: 100,
+      repeat: 10,
       onComplete: () => {
-        scorePopup.destroy();
+        this.isInvulnerable = false;
+        this.player.clearTint();
+        this.player.setAlpha(1);
       },
     });
+
+    // Camera shake
+    this.cameras.main.shake(200, 0.01);
+  }
+
+  private respawnAtCheckpoint(): void {
+    this.player.setPosition(this.lastCheckpointX, this.lastCheckpointY);
+    this.player.setVelocity(0, 0);
+  }
+
+  private reachPortal(): void {
+    // Victory!
+    const stats = this.getStats(true);
+
+    this.scene.start("VictoryScene", {
+      stats,
+      playerName: this.playerName,
+      callbacks: this.callbacks
+    });
+  }
+
+  private gameOver(): void {
+    const stats = this.getStats(false);
+
+    this.scene.start("GameOverScene", {
+      stats,
+      playerName: this.playerName,
+      callbacks: this.callbacks
+    });
+  }
+
+  private getStats(completed: boolean): GameStats {
+    const timeSeconds = Math.floor((Date.now() - this.startTime) / 1000);
+    const timeBonus = Math.max(0, TIME_BONUS_BASE - timeSeconds * TIME_PENALTY_PER_SECOND);
+
+    const finalScore =
+      this.crystalsCollected * CRYSTAL_POINTS +
+      this.enemiesDefeated * ENEMY_POINTS +
+      timeBonus +
+      this.checkpointsReached * CHECKPOINT_BONUS -
+      this.damageTaken * DAMAGE_PENALTY +
+      (completed ? COMPLETION_BONUS : 0);
+
+    return {
+      score: Math.max(0, finalScore),
+      crystals: this.crystalsCollected,
+      enemiesDefeated: this.enemiesDefeated,
+      timeSeconds,
+      checkpointsReached: this.checkpointsReached,
+      damageTaken: this.damageTaken,
+      levelCompleted: completed,
+    };
   }
 
   private addScore(points: number): void {
     this.score += points;
-    this.scoreText.setText(`SCORE: ${this.score}`);
-  }
-
-  private handlePlayerDeath(): void {
-    this.lives--;
-    this.livesText.setText(`LIVES: ${this.lives}`);
-
-    if (this.lives <= 0) {
-      this.gameOver();
-    } else {
-      // Respawn player
-      this.player.setPosition(100, GAME_HEIGHT - 100);
-      this.player.setVelocity(0, 0);
-
-      // Brief invulnerability
-      this.isInvulnerable = true;
-      this.player.setTint(0xff0000);
-
-      this.time.delayedCall(2000, () => {
-        this.isInvulnerable = false;
-        this.player.clearTint();
-      });
-    }
   }
 
   private togglePause(): void {
@@ -489,32 +1084,18 @@ export class GameScene extends Phaser.Scene {
 
     if (this.isPaused) {
       this.physics.pause();
-      this.enemySpawnTimer.paused = true;
-      this.crystalSpawnTimer.paused = true;
-      this.scoreTimer.paused = true;
       this.pauseOverlay.setVisible(true);
+
+      // Listen for restart
+      this.input.keyboard!.once("keydown-R", () => {
+        if (this.isPaused) {
+          this.physics.resume();
+          this.scene.restart();
+        }
+      });
     } else {
       this.physics.resume();
-      this.enemySpawnTimer.paused = false;
-      this.crystalSpawnTimer.paused = false;
-      this.scoreTimer.paused = false;
       this.pauseOverlay.setVisible(false);
     }
-  }
-
-  private gameOver(): void {
-    // Stop timers
-    this.enemySpawnTimer.destroy();
-    this.crystalSpawnTimer.destroy();
-    this.scoreTimer.destroy();
-
-    // Call external callback if provided
-    const onGameOver = this.registry.get("onGameOver");
-    if (onGameOver) {
-      onGameOver(this.score);
-    }
-
-    // Transition to game over scene
-    this.scene.start("GameOverScene", { score: this.score });
   }
 }
