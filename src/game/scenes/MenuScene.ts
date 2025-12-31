@@ -28,12 +28,12 @@ export class MenuScene extends Phaser.Scene {
     this.createBackground();
 
     // Title with glow
-    const title = this.add.text(GAME_WIDTH / 2, 70, "DARTH'S DASH", {
+    const title = this.add.text(GAME_WIDTH / 2, 60, "DARTH'S DASH", {
       fontFamily: "Press Start 2P, monospace",
-      fontSize: "56px",
+      fontSize: "72px",
       color: "#ff0000",
       stroke: "#000000",
-      strokeThickness: 8,
+      strokeThickness: 10,
     });
     title.setOrigin(0.5);
 
@@ -49,11 +49,11 @@ export class MenuScene extends Phaser.Scene {
     // Subtitle
     const subtitle = this.add.text(
       GAME_WIDTH / 2,
-      135,
+      130,
       "A Side-Scrolling Adventure",
       {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "18px",
+        fontSize: "24px",
         color: "#00ffff",
       }
     );
@@ -66,7 +66,7 @@ export class MenuScene extends Phaser.Scene {
       "Designed by Tatus and Jacob",
       {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "16px",
+        fontSize: "20px",
         color: "#ffff00",
       }
     );
@@ -87,11 +87,11 @@ export class MenuScene extends Phaser.Scene {
     // Start button
     const startText = this.add.text(
       GAME_WIDTH / 2,
-      GAME_HEIGHT - 50,
+      GAME_HEIGHT - 40,
       "PRESS ENTER TO START",
       {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "24px",
+        fontSize: "32px",
         color: "#00ff00",
       }
     );
@@ -204,15 +204,15 @@ export class MenuScene extends Phaser.Scene {
 
   private createInstructionsPanel(): void {
     // Panel background
-    const panelX = 170;
+    const panelX = 200;
     const panelY = 450;
 
-    this.add.rectangle(panelX, panelY, 300, 220, 0x000000, 0.7)
-      .setStrokeStyle(3, 0x00ffff);
+    this.add.rectangle(panelX, panelY, 380, 280, 0x000000, 0.7)
+      .setStrokeStyle(4, 0x00ffff);
 
-    this.add.text(panelX, panelY - 85, "CONTROLS", {
+    this.add.text(panelX, panelY - 110, "CONTROLS", {
       fontFamily: "Press Start 2P, monospace",
-      fontSize: "20px",
+      fontSize: "28px",
       color: "#00ffff",
     }).setOrigin(0.5);
 
@@ -224,14 +224,14 @@ export class MenuScene extends Phaser.Scene {
     ];
 
     instructions.forEach((inst, i) => {
-      this.add.text(panelX - 120, panelY - 45 + i * 38, inst.key, {
+      this.add.text(panelX - 160, panelY - 60 + i * 45, inst.key, {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "14px",
+        fontSize: "20px",
         color: "#ffff00",
       });
-      this.add.text(panelX + 30, panelY - 45 + i * 38, inst.action, {
+      this.add.text(panelX + 30, panelY - 60 + i * 45, inst.action, {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "14px",
+        fontSize: "20px",
         color: "#ffffff",
       });
     });
@@ -241,9 +241,9 @@ export class MenuScene extends Phaser.Scene {
     const inputX = GAME_WIDTH / 2;
     const inputY = 580;
 
-    this.add.text(inputX, inputY - 40, "ENTER YOUR NAME:", {
+    this.add.text(inputX, inputY - 50, "ENTER YOUR NAME:", {
       fontFamily: "Press Start 2P, monospace",
-      fontSize: "18px",
+      fontSize: "24px",
       color: "#ffff00",
     }).setOrigin(0.5);
 
@@ -258,19 +258,19 @@ export class MenuScene extends Phaser.Scene {
     this.nameInput.placeholder = "PLAYER";
     this.nameInput.style.cssText = `
       position: absolute;
-      left: ${canvasRect.left + (inputX - 130) * (canvasRect.width / GAME_WIDTH)}px;
+      left: ${canvasRect.left + (inputX - 180) * (canvasRect.width / GAME_WIDTH)}px;
       top: ${canvasRect.top + inputY * (canvasRect.height / GAME_HEIGHT)}px;
-      width: 260px;
-      height: 45px;
+      width: 360px;
+      height: 60px;
       font-family: 'Press Start 2P', monospace;
-      font-size: 18px;
+      font-size: 24px;
       text-align: center;
       background: #1a1a2e;
-      border: 3px solid #00ffff;
+      border: 4px solid #00ffff;
       color: #ffffff;
       outline: none;
       text-transform: uppercase;
-      border-radius: 8px;
+      border-radius: 10px;
     `;
 
     this.nameInput.addEventListener("keydown", (e) => {
@@ -290,23 +290,23 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private createLeaderboardPanel(): void {
-    const panelX = GAME_WIDTH - 220;
+    const panelX = GAME_WIDTH - 250;
     const panelY = 400;
 
     // Panel background
-    this.add.rectangle(panelX, panelY, 360, 400, 0x000000, 0.7)
-      .setStrokeStyle(3, 0xff0000);
+    this.add.rectangle(panelX, panelY, 420, 450, 0x000000, 0.7)
+      .setStrokeStyle(4, 0xff0000);
 
-    this.add.text(panelX, panelY - 170, "TOP SCORES", {
+    this.add.text(panelX, panelY - 190, "TOP SCORES", {
       fontFamily: "Press Start 2P, monospace",
-      fontSize: "22px",
+      fontSize: "32px",
       color: "#ff0000",
     }).setOrigin(0.5);
 
     // Placeholder text (will be replaced when data loads)
     this.add.text(panelX, panelY, "Loading...", {
       fontFamily: "Press Start 2P, monospace",
-      fontSize: "16px",
+      fontSize: "24px",
       color: "#888888",
     }).setOrigin(0.5).setName("leaderboardLoading");
   }
@@ -325,7 +325,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private displayLeaderboard(): void {
-    const panelX = GAME_WIDTH - 220;
+    const panelX = GAME_WIDTH - 250;
     const panelY = 400;
 
     // Remove loading text
@@ -337,36 +337,36 @@ export class MenuScene extends Phaser.Scene {
     if (this.leaderboard.length === 0) {
       this.add.text(panelX, panelY, "No scores yet!", {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "16px",
+        fontSize: "24px",
         color: "#888888",
       }).setOrigin(0.5);
       return;
     }
 
     this.leaderboard.slice(0, 8).forEach((entry, i) => {
-      const y = panelY - 130 + i * 38;
+      const y = panelY - 150 + i * 45;
       const rank = i + 1;
       const color = rank <= 3 ? ["#ffd700", "#c0c0c0", "#cd7f32"][i] : "#ffffff";
 
       // Rank
-      this.add.text(panelX - 150, y, `${rank}.`, {
+      this.add.text(panelX - 180, y, `${rank}.`, {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "14px",
+        fontSize: "20px",
         color: color,
       });
 
       // Name (truncated)
       const name = entry.player_name.slice(0, 6).toUpperCase();
-      this.add.text(panelX - 110, y, name, {
+      this.add.text(panelX - 130, y, name, {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "14px",
+        fontSize: "20px",
         color: color,
       });
 
       // Score
-      this.add.text(panelX + 140, y, entry.score.toLocaleString(), {
+      this.add.text(panelX + 180, y, entry.score.toLocaleString(), {
         fontFamily: "Press Start 2P, monospace",
-        fontSize: "14px",
+        fontSize: "20px",
         color: color,
       }).setOrigin(1, 0);
     });
