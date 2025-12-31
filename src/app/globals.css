@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --vader-red: #ff0000;
+  --vader-black: #1a1a1a;
+  --yoda-green: #9acd32;
+  --space-blue: #0a0a2e;
+}
+
+body {
+  background: linear-gradient(135deg, var(--space-blue) 0%, #1a0a2e 100%);
+  min-height: 100vh;
+}
+
+.game-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+}
+
+.game-canvas {
+  border: 4px solid var(--vader-red);
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+}
+
+.pixel-text {
+  font-family: 'Press Start 2P', monospace;
+  text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5);
+}
+
+.glow-red {
+  animation: glowRed 2s ease-in-out infinite;
+}
+
+@keyframes glowRed {
+  0%, 100% {
+    box-shadow: 0 0 10px var(--vader-red);
+  }
+  50% {
+    box-shadow: 0 0 30px var(--vader-red), 0 0 50px var(--vader-red);
+  }
+}
+
+.btn-game {
+  @apply px-6 py-3 bg-red-600 text-white font-game text-sm rounded-lg;
+  @apply hover:bg-red-500 transition-all duration-200;
+  @apply border-b-4 border-red-800 hover:border-red-700;
+  @apply active:border-b-0 active:mt-1;
+}
