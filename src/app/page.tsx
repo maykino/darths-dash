@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useEffect, useCallback } from "react";
-import { getStoredPlayerName, setStoredPlayerName } from "@/lib/supabase";
+import { getStoredPlayerName, setStoredPlayerName } from "@/lib/leaderboard";
 
 // Dynamically import the game component to avoid SSR issues with Phaser
 const GameComponent = dynamic(() => import("@/components/GameComponent"), {

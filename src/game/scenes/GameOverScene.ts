@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, GameStats, GameCallbacks } from "../config/gameConfig";
-import { calculateScore, submitScoreUnified, CRYSTAL_POINTS, ENEMY_POINTS, CHECKPOINT_BONUS, COMPLETION_BONUS, DAMAGE_PENALTY } from "@/lib/supabase";
+import { calculateScore, submitScoreUnified, CRYSTAL_POINTS, ENEMY_POINTS, CHECKPOINT_BONUS, COMPLETION_BONUS, DAMAGE_PENALTY } from "@/lib/leaderboard";
 
 interface GameOverData {
   stats: GameStats;

@@ -1,23 +1,6 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-
-// Server-side Supabase client with service role key (lazy initialization for build)
-let supabaseAdmin: SupabaseClient | null = null;
-
-function getSupabaseAdmin(): SupabaseClient {
-  if (!supabaseAdmin) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!url || !key) {
-      throw new Error("Missing Supabase configuration");
-    }
-
-    supabaseAdmin = createClient(url, key);
-  }
-  return supabaseAdmin;
-}
+import { insertGameRun, getTopScores, getRecentRuns, getScoreRank, isDatabaseConfigured } from "@/lib/db";
 
 // Game version for validation
 const GAME_VERSION = "2.0.0";
@@ -65,6 +48,14 @@ function generateExpectedToken(data: ScoreSubmission): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Check if database is configured
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Database not configured. Scores are saved locally." },
+      { status: 503 }
+    );
+  }
+
   try {
     const data: ScoreSubmission = await request.json();
 
@@ -119,39 +110,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert into database
-    const { data: result, error } = await getSupabaseAdmin()
-      .from("game_runs")
-      .insert([
-        {
-          player_name: playerName,
-          score: Math.round(data.score),
-          crystals: Math.round(data.crystals),
-          enemies_defeated: Math.round(data.enemiesDefeated),
-          time_seconds: Math.round(data.timeSeconds),
-          checkpoints_reached: Math.round(data.checkpointsReached || 0),
-          damage_taken: Math.round(data.damageTaken || 0),
-          level_completed: Boolean(data.levelCompleted),
-          game_version: GAME_VERSION,
-          run_hash: data.runToken || null,
-        },
-      ])
-      .select()
-      .single();
+    const result = await insertGameRun({
+      playerName,
+      score: Math.round(data.score),
+      crystals: Math.round(data.crystals),
+      enemiesDefeated: Math.round(data.enemiesDefeated),
+      timeSeconds: Math.round(data.timeSeconds),
+      checkpointsReached: Math.round(data.checkpointsReached || 0),
+      damageTaken: Math.round(data.damageTaken || 0),
+      levelCompleted: Boolean(data.levelCompleted),
+      runHash: data.runToken || undefined,
+    });
 
-    if (error) {
-      console.error("Database error:", error);
+    if (!result) {
       return NextResponse.json({ error: "Failed to save score" }, { status: 500 });
     }
 
     // Get player's rank
-    const { data: rankData } = await getSupabaseAdmin().rpc("get_score_rank", {
-      player_score: data.score,
-    });
+    const rank = await getScoreRank(data.score);
 
     return NextResponse.json({
       success: true,
       id: result.id,
-      rank: rankData || 0,
+      rank: rank,
     });
   } catch (error) {
     console.error("Score submission error:", error);
@@ -160,32 +141,24 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  // Check if database is configured
+  if (!isDatabaseConfigured()) {
+    return NextResponse.json({
+      topScores: [],
+      recentRuns: [],
+      message: "Database not configured. Using local storage.",
+    });
+  }
+
   try {
-    // Get top 10 scores
-    const { data: topScores, error: topError } = await getSupabaseAdmin()
-      .from("game_runs")
-      .select("id, player_name, score, crystals, enemies_defeated, time_seconds, level_completed, created_at")
-      .order("score", { ascending: false })
-      .limit(10);
-
-    if (topError) {
-      return NextResponse.json({ error: "Failed to fetch scores" }, { status: 500 });
-    }
-
-    // Get recent 20 runs
-    const { data: recentRuns, error: recentError } = await getSupabaseAdmin()
-      .from("game_runs")
-      .select("id, player_name, score, crystals, enemies_defeated, time_seconds, level_completed, created_at")
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (recentError) {
-      return NextResponse.json({ error: "Failed to fetch recent runs" }, { status: 500 });
-    }
+    const [topScores, recentRuns] = await Promise.all([
+      getTopScores(10),
+      getRecentRuns(20),
+    ]);
 
     return NextResponse.json({
-      topScores: topScores || [],
-      recentRuns: recentRuns || [],
+      topScores,
+      recentRuns,
     });
   } catch (error) {
     console.error("Leaderboard fetch error:", error);

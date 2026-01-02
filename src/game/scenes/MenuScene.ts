@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, GameCallbacks } from "../config/gameConfig";
-import { getLeaderboardUnified } from "@/lib/supabase";
+import { getLeaderboardUnified } from "@/lib/leaderboard";
 
 interface LeaderboardEntry {
   player_name: string;
