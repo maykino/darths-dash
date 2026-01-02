@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, GameCallbacks } from "../config/gameConfig";
+import { getLeaderboardUnified } from "@/lib/supabase";
 
 interface LeaderboardEntry {
   player_name: string;
@@ -355,14 +356,12 @@ export class MenuScene extends Phaser.Scene {
 
   private async fetchLeaderboard(): Promise<void> {
     try {
-      const response = await fetch("/api/score");
-      if (response.ok) {
-        const data = await response.json();
-        this.leaderboard = data.topScores || [];
-        this.displayLeaderboard();
-      }
+      const data = await getLeaderboardUnified();
+      this.leaderboard = data.topScores || [];
+      this.displayLeaderboard();
     } catch (error) {
       console.error("Failed to fetch leaderboard:", error);
+      this.displayLeaderboard(); // Still display (empty) to remove loading text
     }
   }
 

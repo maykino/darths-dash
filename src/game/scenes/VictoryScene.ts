@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { GAME_WIDTH, GAME_HEIGHT, GameStats, GameCallbacks } from "../config/gameConfig";
-import { calculateScore, submitScore, CRYSTAL_POINTS, ENEMY_POINTS, CHECKPOINT_BONUS, COMPLETION_BONUS, DAMAGE_PENALTY, TIME_BONUS_BASE, TIME_PENALTY_PER_SECOND } from "@/lib/supabase";
+import { calculateScore, submitScoreUnified, CRYSTAL_POINTS, ENEMY_POINTS, CHECKPOINT_BONUS, COMPLETION_BONUS, DAMAGE_PENALTY, TIME_BONUS_BASE, TIME_PENALTY_PER_SECOND } from "@/lib/supabase";
 
 interface VictoryData {
   stats: GameStats;
@@ -384,7 +384,7 @@ export class VictoryScene extends Phaser.Scene {
     this.isSubmitting = true;
 
     try {
-      const result = await submitScore({
+      const result = await submitScoreUnified({
         playerName: this.playerName,
         score: score,
         crystals: this.stats.crystals,
