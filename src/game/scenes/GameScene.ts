@@ -36,7 +36,7 @@ interface Checkpoint {
 
 interface Enemy {
   sprite: Phaser.Physics.Arcade.Sprite;
-  type: "patrol" | "flying" | "turret";
+  type: "patrol" | "flying" | "turret" | "witch";
   health: number;
   patrolStart?: number;
   patrolEnd?: number;
@@ -517,13 +517,27 @@ export class GameScene extends Phaser.Scene {
       { x: 4800, y: 220, type: "flying" as const },
       { x: 5800, y: 300, type: "flying" as const },
       { x: 7000, y: 260, type: "flying" as const },
+
+      // Flying witches (Baba Yagas)
+      { x: 1600, y: 200, type: "witch" as const },
+      { x: 2800, y: 180, type: "witch" as const },
+      { x: 4200, y: 240, type: "witch" as const },
+      { x: 5200, y: 160, type: "witch" as const },
+      { x: 6600, y: 220, type: "witch" as const },
     ];
 
     enemyData.forEach((e) => {
-      const texture = e.type === "patrol" ? "yoda_car" : "droid";
+      let texture: string;
+      if (e.type === "patrol") {
+        texture = "yoda_car";
+      } else if (e.type === "witch") {
+        texture = "witch";
+      } else {
+        texture = "droid";
+      }
       const sprite = this.physics.add.sprite(e.x, e.y, texture);
       (sprite.body as Phaser.Physics.Arcade.Body).allowGravity = e.type === "patrol";
-      sprite.setImmovable(e.type === "flying");
+      sprite.setImmovable(e.type === "flying" || e.type === "witch");
 
       const enemy: Enemy = {
         sprite,
@@ -547,6 +561,17 @@ export class GameScene extends Phaser.Scene {
           ease: "Sine.easeInOut",
         });
         sprite.setVelocityX(-FLYING_ENEMY_SPEED);
+      } else if (e.type === "witch") {
+        // Witches fly in a swooping pattern and move faster
+        this.tweens.add({
+          targets: sprite,
+          y: e.y + 120,
+          duration: 2500,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+        sprite.setVelocityX(-FLYING_ENEMY_SPEED * 1.3);
       }
 
       this.enemies.push(enemy);
@@ -997,8 +1022,8 @@ export class GameScene extends Phaser.Scene {
             enemy.sprite.setFlipX(true);
           }
         }
-      } else if (enemy.type === "flying") {
-        // Flying enemies wrap around
+      } else if (enemy.type === "flying" || enemy.type === "witch") {
+        // Flying enemies and witches wrap around
         if (enemy.sprite.x < -50) {
           enemy.sprite.x = LEVEL_WIDTH + 50;
         }

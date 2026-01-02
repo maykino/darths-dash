@@ -275,6 +275,50 @@ export class PreloadScene extends Phaser.Scene {
     spike.strokeTriangle(16, 0, 0, 40, 32, 40);
     spike.generateTexture("spike", 32, 40);
     spike.destroy();
+
+    // Flying witch (Baba Yaga) on broomstick
+    const witch = this.make.graphics({ x: 0, y: 0 });
+    // Broomstick
+    witch.fillStyle(0x8B4513);
+    witch.fillRect(4, 36, 56, 6);
+    witch.fillStyle(0x654321);
+    witch.fillRect(52, 32, 12, 14);
+    // Broom bristles
+    witch.fillStyle(0xDAA520);
+    witch.fillTriangle(64, 32, 64, 46, 80, 39);
+    // Witch body/robe - dark purple
+    witch.fillStyle(0x2a1a3a);
+    witch.fillRoundedRect(16, 18, 24, 22, 4);
+    // Witch head - green skin
+    witch.fillStyle(0x5a8a4a);
+    witch.fillCircle(28, 12, 10);
+    // Witch hat - pointy black hat
+    witch.fillStyle(0x1a1a2a);
+    witch.fillTriangle(28, -8, 16, 8, 40, 8);
+    witch.fillRect(14, 6, 28, 6);
+    // Hat band with neon glow
+    witch.fillStyle(COLORS.neonPurple);
+    witch.fillRect(16, 6, 24, 3);
+    // Witch face - glowing eyes and crooked nose
+    witch.fillStyle(COLORS.neonGreen);
+    witch.fillCircle(24, 10, 3);
+    witch.fillCircle(32, 10, 3);
+    witch.fillStyle(0x4a7a3a);
+    witch.fillTriangle(28, 12, 26, 18, 30, 18);
+    // Witch hair - stringy
+    witch.fillStyle(0x333333);
+    witch.fillRect(18, 4, 3, 14);
+    witch.fillRect(35, 4, 3, 14);
+    // Arms holding broom
+    witch.fillStyle(0x5a8a4a);
+    witch.fillRect(12, 28, 8, 4);
+    witch.fillRect(36, 28, 8, 4);
+    // Magical trail/glow
+    witch.fillStyle(COLORS.neonPurple, 0.4);
+    witch.fillCircle(8, 39, 8);
+    witch.fillCircle(0, 39, 5);
+    witch.generateTexture("witch", 80, 48);
+    witch.destroy();
   }
 
   private createEnvironmentAssets(): void {
