@@ -1132,6 +1132,19 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Check if player is stomping on enemy (jumping on top)
+    const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+
+    // Player must be falling and their feet should be above enemy's center
+    const playerFeetY = this.player.y + playerBody.halfHeight;
+
+    if (playerBody.velocity.y > 0 && playerFeetY < enemy.sprite.y) {
+      // Stomp successful! Destroy enemy and bounce player
+      this.destroyEnemy(enemy);
+      this.player.setVelocityY(PLAYER_JUMP_VELOCITY * 0.6); // Bounce up
+      return;
+    }
+
     this.takeDamage();
   }
 
